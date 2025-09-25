@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Accounts – Daily Sales & Cash Reconciliation</title>
+  <style>
+    :root{
+      --brand:#0ea5e9; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --ink:#111827; --muted:#6b7280; --bg:#f8fafc;
+      --card:#ffffff; --line:#e5e7eb;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+    header{background:var(--brand);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+    header h1{margin:0;font-size:18px}
+    .pill{padding:6px 10px;border-radius:999px;background:#fee2e2;color:#991b1b;font-weight:700}
+    .pill.connected{background:#dcfce7;color:#065f46}
+    .pill.syncing{background:#fef9c3;color:#854d0e}
+    header .actions{display:flex;gap:10px;align-items:center}
+    .btn{border:none;cursor:pointer;padding:10px 14px;border-radius:10px;font-weight:800}
+    .btn.light{background:#e0f2fe;color:#0369a1}
+    .btn.primary{background:#1d4ed8;color:#fff}
+    .btn.success{background:#16a34a;color:#fff}
+    .btn.clear{background:#ef4444;color:#fff}
+
+    .container{max-width:1100px;margin:0 auto;padding:16px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 2px 16px rgba(0,0,0,.04);margin-bottom:16px}
+    .card h2{font-size:16px;margin:0;padding:14px 16px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#f8fafc,#eef2ff)}
+    .card .content{padding:14px 16px}
+    label{display:block;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+    input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:14px}
+
+    .route-buttons{display:flex;gap:8px;flex-wrap:wrap}
+    .route-btn{border:2px solid var(--line);background:#fff;color:#111827;font-weight:700;padding:10px 16px;border-radius:12px;cursor:pointer}
+    .route-btn.active{background:#dcfce7;border-color:#16a34a;color:#065f46}
+
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .row > *{flex:1 1 220px}
+
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid var(--line);padding:10px;text-align:center}
+    th{background:#f3f4f6;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+    tfoot td{font-weight:800}
+
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    @media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+
+    .badge{font-size:12px;background:#f3f4f6;border:1px solid var(--line);padding:4px 8px;border-radius:999px}
+    .right{float:right}
+
+    .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:999px;font-weight:700;display:none;z-index:1000}
+    .toast.show{display:block}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Accounts – Daily Sales & Cash Reconciliation</h1>
+    <div class="actions">
+      <div class="pill" id="syncPill">Offline</div>
+      <button id="checkConnBtn" class="btn light">Check Connection</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Context -->
+    <div class="card">
+      <h2>Context</h2>
+      <div class="content">
+        <div class="row" style="margin-bottom:12px">
+          <div>
+            <label>Select Route</label>
+            <div class="route-buttons" id="routeButtons">
+              <button class="route-btn" data-route="Al-Hasa One">Al-Hasa One</button>
+              <button class="route-btn" data-route="Al-Hasa Two">Al-Hasa Two</button>
+              <button class="route-btn" data-route="Al-Hasa Three">Al-Hasa Three</button>
+              <button class="route-btn" data-route="Al-Hasa Four">Al-Hasa Four</button>
+              <button class="route-btn" data-route="Al-Hasa Wholesale">Al-Hasa Wholesale</button>
+            </div>
+          </div>
+          <div>
+            <label>Previous Date (Opening)</label>
+            <input type="date" id="prevDate" />
+          </div>
+          <div>
+            <label>Current Date (Closing)</label>
+            <input type="date" id="currDate" />
+          </div>
+        </div>
+        <div class="row" style="align-items:center">
+          <button class="btn primary" id="calcBtn">Calculate Sales from Inventory</button>
+          <span class="badge" id="itemCount">0 SKUs</span>
+          <span class="badge right" id="currencyBadge">SAR</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sales -->
+    <div class="card">
+      <h2>Sales by SKU</h2>
+      <div class="content">
+        <div style="overflow:auto">
+          <table id="salesTable">
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Item</th>
+                <th>Unit</th>
+                <th>Price</th>
+                <th>Quantity Sold</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot>
+              <tr>
+                <td colspan="5" style="text-align:right">Total Sales</td>
+                <td id="totalSales">0.00</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cash / Non-cash -->
+    <div class="grid-2">
+      <div class="card">
+        <h2>Non-Cash / Bank</h2>
+        <div class="content">
+          <div class="row">
+            <div>
+              <label>Credit Sales</label>
+              <input type="number" id="creditSales" value="0" />
+            </div>
+            <div>
+              <label>Credit Repayment</label>
+              <input type="number" id="creditRepayment" value="0" />
+            </div>
+            <div>
+              <label>Bank POS</label>
+              <input type="number" id="bankPOS" value="0" />
+            </div>
+            <div>
+              <label>Bank Transfer</label>
+              <input type="number" id="bankTransfer" value="0" />
+            </div>
+            <div>
+              <label>Cheque</label>
+              <input type="number" id="cheque" value="0" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Cash Count</h2>
+        <div class="content">
+          <div class="row">
+            <div>
+              <label>Notes Total</label>
+              <input type="number" id="notesTotal" value="0" />
+            </div>
+            <div>
+              <label>Coins</label>
+              <input type="number" id="coins" value="0" />
+            </div>
+            <div>
+              <label>Actual Cash</label>
+              <input type="number" id="actualCash" value="0" />
+            </div>
+          </div>
+          <div style="margin-top:10px">
+            <div><span class="badge">Expected Cash: <span id="expectedCash">0.00</span></span></div>
+            <div style="margin-top:6px"><span class="badge">Difference: <span id="difference">0.00</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Finalize -->
+    <div class="card">
+      <h2>Finalize</h2>
+      <div class="content">
+        <div class="row" style="align-items:center">
+          <button class="btn success" id="saveBtn">Save Reconciliation</button>
+          <button class="btn clear" id="clearBtn">Clear</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Saved</div>
+
+  <script>
+    // ====== CONFIG ======
+    const WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwxddHbw-oIgjEJ1pw23HXZieVycmqTgsLKJW2QrzXedAdTmuCPL_7DQUEYA_Mdcb81CQ/exec';
+    const CURRENCY = 'SAR';
+
+    // ====== STATE ======
+    let selectedRoute = '';
+    let salesItems = []; // [{code,name,unit,price,quantity,total,category}]
+    let skuMap = {};     // { SKU: {name, unit, price, category} }
+
+    // ====== UI UTIL ======
+    function toast(msg, type='info'){
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = `toast ${type} show`;
+      setTimeout(() => t.classList.remove('show'), 1800);
+    }
+    function setSync(status){
+      const pill = document.getElementById('syncPill');
+      pill.className = `pill ${status}`;
+      if(status==='connected'){ pill.textContent='Connected'; }
+      else if(status==='syncing'){ pill.textContent='Syncing…'; }
+      else { pill.textContent='Offline'; }
+    }
+    function num(v){ const n = Number(v); return isNaN(n)?0:n; }
+
+    // ====== BINDINGS ======
+    document.getElementById('currencyBadge').textContent = CURRENCY;
+
+    const routeButtons = document.getElementById('routeButtons');
+    routeButtons.addEventListener('click', (e)=>{
+      if(e.target.classList.contains('route-btn')){
+        document.querySelectorAll('.route-btn').forEach(b=>b.classList.remove('active'));
+        e.target.classList.add('active');
+        selectedRoute = e.target.dataset.route;
+      }
+    });
+
+    document.getElementById('calcBtn').addEventListener('click', calculateFromInventory);
+    document.getElementById('saveBtn').addEventListener('click', saveRecon);
+    document.getElementById('clearBtn').addEventListener('click', clearAll);
+    document.getElementById('checkConnBtn').addEventListener('click', checkConnection);
+
+    // Live recompute cash metrics on inputs
+    ['creditSales','creditRepayment','bankPOS','bankTransfer','cheque','notesTotal','coins','actualCash']
+      .forEach(id=> document.getElementById(id).addEventListener('input', computeCash));
+
+    // ====== TABLE RENDER ======
+    function renderSalesTable(){
+      const tbody = document.querySelector('#salesTable tbody');
+      tbody.innerHTML = '';
+      let grand = 0;
+      salesItems.forEach((it, idx)=>{
+        const total = num(it.price) * num(it.quantity);
+        grand += total;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${it.code}</td>
+          <td>${it.name || ''}</td>
+          <td>${it.unit || ''}</td>
+          <td>${num(it.price).toFixed(2)}</td>
+          <td><input type="number" min="0" value="${num(it.quantity)}" data-idx="${idx}" class="qty-input" style="width:100px"/></td>
+          <td>${total.toFixed(2)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      document.getElementById('totalSales').textContent = grand.toFixed(2);
+      document.getElementById('itemCount').textContent = `${salesItems.length} SKUs`;
+      computeCash();
+    }
+
+    document.addEventListener('input', (e)=>{
+      if(e.target.classList.contains('qty-input')){
+        const i = Number(e.target.dataset.idx);
+        salesItems[i].quantity = num(e.target.value);
+        renderSalesTable();
+      }
+    });
+
+    // ====== CASH MATH ======
+    function computeCash(){
+      const totalSales = num(document.getElementById('totalSales').textContent);
+      const creditSales = num(document.getElementById('creditSales').value);
+      const creditRepayment = num(document.getElementById('creditRepayment').value);
+      const bankPOS = num(document.getElementById('bankPOS').value);
+      const bankTransfer = num(document.getElementById('bankTransfer').value);
+      const cheque = num(document.getElementById('cheque').value);
+      const actualCash = num(document.getElementById('actualCash').value);
+
+      // Expected cash = Total sales - non-cash (POS/Transfer/Cheque/CreditSales) + creditRepayment
+      const expected = totalSales - (bankPOS + bankTransfer + cheque + creditSales) + creditRepayment;
+
+      document.getElementById('expectedCash').textContent = expected.toFixed(2);
+      document.getElementById('difference').textContent = (actualCash - expected).toFixed(2);
+    }
+
+    // ====== BACKEND: CONNECTION & CATALOG ======
+    async function checkConnection(){
+      setSync('syncing');
+      try{
+        const res = await fetch(`${WEBHOOK_URL}?action=init`, { method:'GET' });
+        const data = await res.json();
+        if(data && data.success){
+          setSync('connected');
+          toast('API connected','success');
+
+          // Build SKU map from catalog for enrichment
+          skuMap = {};
+          if (data.data && data.data.catalog) {
+            Object.entries(data.data.catalog).forEach(([category, items])=>{
+              items.forEach(item=>{
+                skuMap[item.code] = {
+                  name: item.name || '',
+                  unit: item.unit || '',
+                  price: Number(item.price || 0),
+                  category
+                };
+              });
+            });
+          }
+        } else {
+          setSync('offline'); toast('API error','error');
+        }
+      }catch(e){ setSync('offline'); toast('Offline','error'); }
+    }
+
+    // ====== BACKEND: CALCULATE SALES ======
+    async function calculateFromInventory(){
+      if(!selectedRoute){ toast('Select route'); return; }
+      const previousDate = document.getElementById('prevDate').value;
+      const currentDate  = document.getElementById('currDate').value;
+      if(!previousDate || !currentDate){ toast('Pick both dates'); return; }
+
+      setSync('syncing');
+      try{
+        const res = await fetch(WEBHOOK_URL, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ action:'calculateSalesFromInventory', route:selectedRoute, previousDate, currentDate })
+        });
+        const data = await res.json();
+        if(data.status !== 'success'){ throw new Error(data.data || 'API error'); }
+
+        // Enrich with catalog where possible
+        salesItems = (data.data||[]).map(x=>{
+          const meta = skuMap[x.code] || {};
+          const price = (Number(x.price || 0) || Number(meta.price || 0));
+          return {
+            code: x.code,
+            name: meta.name || '',
+            unit: meta.unit || '',
+            price: price,
+            quantity: Number(x.salesQty || 0),
+            total: 0,
+            category: meta.category || ''
+          };
+        });
+        renderSalesTable();
+        setSync('connected');
+        toast('Sales calculated','success');
+      }catch(err){
+        console.error(err);
+        setSync('offline'); toast('Failed to calculate','error');
+      }
+    }
+
+    // ====== BACKEND: SAVE RECON ======
+    async function saveRecon(){
+      if(!selectedRoute){ toast('Select route'); return; }
+      const date = document.getElementById('currDate').value;
+      if(!date){ toast('Pick current date'); return; }
+
+      const payload = {
+        action: 'saveCashReconciliation',
+        route: selectedRoute,
+        date,
+        salesItems: salesItems.map(it=> ({
+          code: it.code,
+          name: it.name,
+          unit: it.unit,
+          price: num(it.price),
+          quantity: num(it.quantity),
+          total: num(it.price) * num(it.quantity),
+          category: it.category || ''
+        })),
+        totalSales: num(document.getElementById('totalSales').textContent),
+        creditSales: num(document.getElementById('creditSales').value),
+        creditRepayment: num(document.getElementById('creditRepayment').value),
+        bankPOS: num(document.getElementById('bankPOS').value),
+        bankTransfer: num(document.getElementById('bankTransfer').value),
+        cheque: num(document.getElementById('cheque').value),
+        expectedCash: num(document.getElementById('expectedCash').textContent),
+        cashNotes: { total: num(document.getElementById('notesTotal').value) },
+        coins: num(document.getElementById('coins').value),
+        actualCash: num(document.getElementById('actualCash').value),
+        difference: num(document.getElementById('difference').textContent),
+        timestamp: new Date().toISOString()
+      };
+
+      setSync('syncing');
+      try{
+        const res = await fetch(WEBHOOK_URL, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if(data.status !== 'success') throw new Error(data.data || 'Save failed');
+
+        setSync('connected'); toast('Saved','success');
+        clearAll();
+      }catch(err){
+        console.error(err);
+        setSync('offline'); toast('Save failed','error');
+      }
+    }
+
+    // ====== CLEAR ======
+    function clearAll(){
+      document.querySelectorAll('.route-btn').forEach(b=>b.classList.remove('active'));
+      selectedRoute = '';
+      document.getElementById('prevDate').value = '';
+      document.getElementById('currDate').value = '';
+      salesItems = []; renderSalesTable();
+      ['creditSales','creditRepayment','bankPOS','bankTransfer','cheque','notesTotal','coins','actualCash']
+        .forEach(id=> document.getElementById(id).value = 0);
+      document.getElementById('expectedCash').textContent = '0.00';
+      document.getElementById('difference').textContent = '0.00';
+      toast('Cleared','info');
+    }
+
+    // ====== BOOT ======
+    (async function boot(){
+      await checkConnection(); // loads catalog + sets pill
+    })();
+  </script>
+</body>
+</html>
